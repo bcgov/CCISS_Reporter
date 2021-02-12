@@ -34,6 +34,19 @@ Rcpp::sourceCpp("0CCISS_Cfn.cpp")
 source("1CCISS_Data.R")
 source("2CCISS_EdaOverlap.R")
 source("3CCISS_Suit.R")
+
+cloud_dir <- ("./data_tables/")
+# if(dir.exists("E:/Sync/CCISS_data/")){
+#   cloud_dir <- "E:/Sync/CCISS_data/"
+# }else{
+#   cloud_dir <- "C:/Users/kirid/Desktop/Work2021/"
+# }
+E1 <- fread(paste0(cloud_dir, "Edatopic_v11_22.csv")) 
+S1 <- fread(paste0(cloud_dir,"Feasibility_v11_22.csv"))
+
+R1 <- fread(paste0(cloud_dir,"RuleTable.csv"))
+F1 <- fread(paste0(cloud_dir,"FeasibilityLabels.csv"))
+
 ```
 
 #### Pull predicted data from PostGres database sitting on server in Will's kitchen.
@@ -44,23 +57,17 @@ New scripter as the local directory which is synced to our SYNC drive. Data.
 ##load csv with lat and long columns
 loc_name <- "WilliamsLake" ## name of trial run
 pointDat <- fread("./test_locations/WilliamsLake_Locations.csv")
-#test_siteno <- dbGetHexID(pointDat,host = "smithersresearch.ca")
+#test_siteno <- dbGetHexID(pointDat,host = "smithersresearch.ca") ## returns hex number from location for testing
 tic()
 test_siteno <- dbGetHexID(pointDat, host = "FLNRServer")
 toc()
 ID1_testsite <- cbind(pointDat, test_siteno) %>% rename(SiteNo = test_siteno)
-# test_siteno <- c(3084611 ,3088043 ,3088100 ,3093240 ,3096701 ,3103527 ,3103529 ,3103530 ,3105299 ,3115525)
+# test_siteno <- c(3084611 ,3088043 ,3088100 ,3093240 ,3096701 ,3103527 ,3103529 ,3103530 ,3105299 ,3115525) #hex numbers
 average <- FALSE
-#dat <- dbGetCCISS(test_siteno, avg = average, host = "smithersresearch.ca")
-dat <- dbGetCCISS(test_siteno, avg = average, host = "FLNRServer")
+#dat <- dbGetCCISS(test_siteno, avg = average, host = "smithersresearch.ca") ## for remote access
+dat <- dbGetCCISS(test_siteno, avg = average, host = "FLNRServer") ## for Will
 #dat <- dat %>% filter (BGC == "IDFxh2")
-fwrite(dat, paste0("./output/", loc_name, "_BGC_predicted.csv"), row.names = FALSE)
-##Set drive with Sync cloud data
-if(dir.exists("E:/Sync/CCISS_data/")){
-  cloud_dir <- "E:/Sync/CCISS_data/"
-}else{
-  cloud_dir <- "C:/Users/kirid/Desktop/Work2021/"
-}
+
 
 ```
 
@@ -69,20 +76,14 @@ if(dir.exists("E:/Sync/CCISS_data/")){
 This function is a much faster (~3000x) reworking of the original nested foreach loops. Input is bgc predictions (from above) and output is site series prediction.
 
 ```{r edaOverlap}
-#E1 <- fread("/media/kiridaust/MrBig/CommonTables/Edatopic_v11_20.csv") 
-E1 <- fread(paste0(cloud_dir, "CommonTables/Edatopic_v11_22.csv")) 
 #E1 <- E1 %>% filter(BGC == "PPxh1") ##edatopic grids
 SSPreds <- edatopicOverlap(dat,Edatope = E1)
 ```
 
-#### Calculate New Suit and Statistics
+#### Calculate Feasibility and Statistics
 
 ```{r merge suit}
-S1 <- fread(paste0(cloud_dir,"CommonTables/Feasibility_v11_22.csv")) ##environmental feasibility
-#S1 <- fread("/media/kiridaust/MrBig/CommonTables/Feasibility_v11_21.csv") ##environmental feasibility
 
-R1 <- fread(paste0(cloud_dir,"CommonTables/RuleTable.csv"))
-F1 <- fread(paste0(cloud_dir,"CommonTables/FeasibilityLabels.csv"))
 cciss_res <- ccissOutput(SSPred = SSPreds, suit = S1, rules = R1, feasFlag = F1)
 CCISS_Summary <- as.data.frame (cciss_res$Summary)
 CCISS_Summary <- left_join(CCISS_Summary,ID1_testsite) %>% dplyr::select(ID1, everything())#%>% filter(!ID1 == "test")
@@ -93,98 +94,4 @@ CCISS_Raw  <- left_join(CCISS_Raw ,ID1_testsite) %>% dplyr::select(-ID2, -ModAgr
   dplyr::select(ID1, everything()) %>% 
   filter(!ID1 == "test") %>% mutate(across(NewSuit, round, 0)) %>% mutate(across(c(`1`, `2`, `3`, X), round, 2))
 
-fwrite(CCISS_Raw, paste0("./output/", loc_name, "_CCISS_Raw_Table.csv"), row.names = FALSE)
-fwrite(CCISS_Summary, paste0("./output/", loc_name, "_CCISS_Summary_Table.csv"), row.names = FALSE)
 ```
-#Tasks
-A. Rules and calculations
-### Add in current climate change period in feasibility calculation DONE
-### Adjust where historic model is different than actual model (Use probability weighting in current and historical runs to weigh towards current)
-B. Knitr report
-### Table for selected sites 
-### Map of selected site locations
-
-### Map of input locations
-
-```{r location map setup, message = FALSE, echo= FALSE, include=FALSE}
-
-## Create map of test locations by analysis unit
-# locations <- pointDat
-# locations2 <- locations %>% dplyr::rename(latitude = "Lat", longitude = "Long", elevation = "Elev") %>% #
-#   dplyr::select (ID1, ID2,latitude,longitude)
-# #BGCmap <- st_read(dsn = paste0(cloud_dir, "./SunshineCoast.gpkg"), layer = "BGC_Dissolved")
-# 
-# locations2 <- st_as_sf(locations2, coords = c("longitude","latitude"), crs = 4326, agr = "constant") %>%
-#   st_transform(st_crs(BGCmap))
-
-```
-
-```{r location map, fig.height = 13, fig.width = 12, fig.cap = "Figure 1. Sample locations in BGC analysis units for portfolio development in the Sunshine Coast District"}
-#tmaptools::palette_explorer() ###tool for choosing colours
-
-# tmap_mode("plot")
-# #tmap_options(basemaps = "OpenTopoMap")
-# tBGC <- #tm_shape (BGCmap) + tm_polygons("BGC", alpha = .9)+
-#     tm_shape(locations2) + tm_symbols(size = 0.3, shape = 24, col = "BGC_analysis")+
-#   tm_layout(legend.outside = TRUE, legend.outside.position = "right", legend.stack = "vertical")
-#   #tm_layout(basemaps = leaflet::providers$OpenStreetMap)
-# tBGC
-
-```
-### BGC ratios by timeperiod
-### Predicted BGC subzone/variants for each future time period from 30 climate models
-
-```{r BGC_plot, fig.width=10, fig.height=6, fig.cap = "Figure 4. Ratio of predicted BGCs in each analysis unit 2040-2070"}
-BGCPred <- as.data.table(dat)
-# setkey(BGCPred, SiteNo)
-# #BGCPred <- BGCPred[analUnits]
-# NumFutures <- BGCPred[,.(Num = length(BGC.pred)), keyby = .(SiteNo,FuturePeriod)]
-# #totNum <- BGCPred[,.(Total = sum(Num)), keyby = .(FuturePeriod,BGC_analysis)]
-# BGCPred <- totNum[BGCPred]
-# BGCPred[,Prop := Num/Total]
-# 
-# #period <- 2055
-# #BGCPred <- BGCPred[FuturePeriod == period & Prop > 0.05,]
-# BGCPred[,Prop := Num/sum(Num), by = FuturePeriod]
-
-ggplot(BGCPred, aes(x = FuturePeriod,y = BGC.prop, fill = BGC.pred, label = BGC.pred))+
-  geom_bar(stat = 'identity')+
-  geom_text(size = 3, position = position_stack(vjust = 0.5), angle = 45)+
-  theme_few()+
-  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
-  facet_wrap(~BGC)
-```
-### Raw suitability probabilities by time period
-```{r raw table and grphic}
-##pivot summary longer for ggplot format
-Raw.long <- CCISS_Raw %>% dplyr::select(-Curr, -NewSuit ) %>% pivot_longer(cols = c(`1`, `2`, `3`, X), names_to = "feas", values_to = "prob", values_drop_na = FALSE)
-Raw.long <- Raw.long %>% filter(ID1== 'W0312') %>% mutate(FuturePeriod = factor(FuturePeriod))
-
-ggplot(Raw.long, aes(x = reorder(FuturePeriod, desc(FuturePeriod)), y = prob, fill = feas))+
-  geom_bar(stat = 'identity',position = position_stack(reverse = TRUE))+
-  #scale_x_discrete(limits = rev(levels(FuturePeriod)))+
-  coord_flip()+
-  #geom_text(size = 3, position = position_stack(vjust = 0.5), angle = 45)+
-  theme_few()+
-  theme(axis.text.x = element_text(angle = 90), legend.position = "top") +
-  facet_wrap(~Spp)
-```
-
-
-### summary recommendations
-```{r}
-##pivot summary longer for ggplot format
-#Sum.long <- CISS_Summary %>% select( pivot_longer(CCISS_Summary
-# ggplot(CCISS_Summary, aes(x = FuturePeriod, y = BGC.prop, fill = BGC.pred, label = BGC.pred))+
-#   geom_bar(stat = 'identity')+
-#   geom_text(size = 3, position = position_stack(vjust = 0.5), angle = 45)+
-#   theme_few()+
-#   theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
-#   facet_wrap(~BGC)
-```
-
-
-
-
-### tie in portfolio results
-### loop to produce multiple reports by 
