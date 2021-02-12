@@ -49,9 +49,9 @@ F1 <- fread(paste0(cloud_dir,"FeasibilityLabels.csv"))
 
 ```
 
-#### Pull predicted data from PostGres database sitting on server in Will's kitchen.
+Pull predicted data from PostGres database sitting on server in Will's kitchen.
 Extract data given hex id values. Output is predicted BGCs, with the proportion of models that predict them.
-New scripter as the local directory which is synced to our SYNC drive. Data.
+
 
 ```{r get BGC.pred at sites}
 ##load csv with lat and long columns
@@ -64,20 +64,20 @@ toc()
 ID1_testsite <- cbind(pointDat, test_siteno) %>% rename(SiteNo = test_siteno)
 # test_siteno <- c(3084611 ,3088043 ,3088100 ,3093240 ,3096701 ,3103527 ,3103529 ,3103530 ,3105299 ,3115525) #hex numbers
 average <- FALSE
-#dat <- dbGetCCISS(test_siteno, avg = average, host = "smithersresearch.ca") ## for remote access
-dat <- dbGetCCISS(test_siteno, avg = average, host = "FLNRServer") ## for Will
-#dat <- dat %>% filter (BGC == "IDFxh2")
+#BGC <- dbGetCCISS(test_siteno, avg = average, host = "smithersresearch.ca") ## for remote access
+BGC <- dbGetCCISS(test_siteno, avg = average, host = "FLNRServer") ## for Will
+#BGC <- BGC %>% filter (BGC == "IDFxh2")
 
 
 ```
 
 #### Edatopic Overlap
 
-This function is a much faster (~3000x) reworking of the original nested foreach loops. Input is bgc predictions (from above) and output is site series prediction.
+This function is a much faster (~3000x) reworking of the original nested foreach loops. Input is bgc predictions (from above) and output is future site series.
 
 ```{r edaOverlap}
 #E1 <- E1 %>% filter(BGC == "PPxh1") ##edatopic grids
-SSPreds <- edatopicOverlap(dat,Edatope = E1)
+SSPreds <- edatopicOverlap(BGC,Edatope = E1)
 ```
 
 #### Calculate Feasibility and Statistics
@@ -95,3 +95,7 @@ CCISS_Raw  <- left_join(CCISS_Raw ,ID1_testsite) %>% dplyr::select(-ID2, -ModAgr
   filter(!ID1 == "test") %>% mutate(across(NewSuit, round, 0)) %>% mutate(across(c(`1`, `2`, `3`, X), round, 2))
 
 ```
+
+1. BGC ratios stack bar from BGC table
+2. Feasibility report from CCISS_Summary + CCISS_Raw tables
+3. Map of locations from CCISS_Sites
